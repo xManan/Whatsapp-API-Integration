@@ -3,12 +3,7 @@ import path from 'path';
 import SftpClient from 'ssh2-sftp-client';
 
 async function saveFileToServer(localFilePath1, fileName, serverConfig) {
-    // const serverConfig2 = {
-    //     host: '10.171.25.94',
-    //     username: 'mohit.kumar',
-    //     password: 'SvlNonProd123$',
-    //     remotePath: '/home/mohit.kumar/whatsapp-files"', // Optional
-    // };
+    
     const serverConfig2 = {
         host: '192.168.122.162',
         username: 'sftpuser',
