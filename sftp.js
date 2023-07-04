@@ -6,19 +6,19 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // TODO: Add your server configuration .env
-// const serverConfig = {
-//     host: process.env.SFTP_HOST,
-//     username: process.env.SFTP_USER,
-//     password: process.env.SFTP_PASSWORD,
-//     remotePath: process.env.SFTP_REMOTE_DIR,
-// }
-
 const serverConfig = {
-    host: '192.168.122.162',
-    username: 'sftpuser',
-    password: 'sftp',
-    remotePath: '', // Optional
-};
+    host: process.env.SFTP_HOST,
+    username: process.env.SFTP_USER,
+    password: process.env.SFTP_PASSWORD,
+    remotePath: process.env.SFTP_REMOTE_DIR,
+}
+
+// const serverConfig = {
+//     host: '192.168.122.162',
+//     username: 'sftpuser',
+//     password: 'sftp',
+//     remotePath: '', // Optional
+// };
 
 const localFolderPath = './imgs';
 
