@@ -11,11 +11,11 @@ let imgDir = process.env.IMG_DIR || './imgs'
 let logDir = process.env.LOG_DIR || './logs'
 
 if (!fs.existsSync(imgDir)) {
-    fs.mkdirSync(imgDir, { recursive: true });
+    fs.mkdirSync(imgDir, { recursive: true })
 }
 
 if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir, { recursive: true });
+    fs.mkdirSync(logDir, { recursive: true })
 }
 const token = process.env.WHATSAPP_TOKEN
 const port = process.env.PORT || 3000
@@ -35,15 +35,16 @@ app.post("/webhook", async (req, res) => {
             req.body.entry[0].changes[0].value.messages &&
             req.body.entry[0].changes[0].value.messages[0]
         ) {
-            const message = req.body.entry[0].changes[0].value.messages[0];
+            const message = req.body.entry[0].changes[0].value.messages[0]
             let imgData
             if (message.type === "document" && message.document.mime_type.match(/image\/.*/)) {
                 imgData = message.document
             } else if (message.type === "image") {
                 imgData = message.image
             } else {
-                res.sendStatus(200);
-                return;
+                info_log("Not an image")
+                res.sendStatus(200)
+                return
             }
             let response = await fetch(`${whatsappMediaUrl}/${imgData.id}`, {
                 method: 'GET',
@@ -54,49 +55,53 @@ app.post("/webhook", async (req, res) => {
             let img = await response.json()
             let imgType = imgData.mime_type.split('/')[1]
             if (!img.url) {
-                console.log("No image url found");
-                res.sendStatus(200);
-                return;
+                error_log(`No image url: ${JSON.stringify(img)}`)
+                res.sendStatus(200)
+                return
             }
             try {
-                await downloadFile(img.url, `${imgDir}/${imgData.id}.${imgType}`, `Bearer ${token}`)
+                let imgPath = `${imgDir}/WA_IMG_${imgData.id}.${imgType}`
+                await downloadFile(img.url, imgPath, `Bearer ${token}`)
+                info_log(`Image downloaded: ${imgPath}`)
             } catch (error) {
-                console.log(error);
+                error_log(error)
+                res.sendStatus(200)
             }
         }
-        res.sendStatus(200);
+        res.sendStatus(200)
     } else {
         // Return a '404 Not Found' if event is not from a WhatsApp API
-        res.sendStatus(404);
+        error_log("Event is not from a WhatsApp API")
+        res.sendStatus(404)
     }
-});
+})
 
 app.get("/webhook", (req, res) => {
     /**
      * UPDATE YOUR VERIFY TOKEN
      *This will be the Verify Token value when you set up webhook
     **/
-    const verify_token = process.env.VERIFY_TOKEN;
-    console.log("verify_token: " + verify_token);
+    const verify_token = process.env.VERIFY_TOKEN
+    console.log("verify_token: " + verify_token)
 
     // Parse params from the webhook verification request
-    let mode = req.query["hub.mode"];
-    let token = req.query["hub.verify_token"];
-    let challenge = req.query["hub.challenge"];
+    let mode = req.query["hub.mode"]
+    let token = req.query["hub.verify_token"]
+    let challenge = req.query["hub.challenge"]
 
     // Check if a token and mode were sent
     if (mode && token) {
         // Check the mode and token sent are correct
         if (mode === "subscribe" && token === verify_token) {
             // Respond with 200 OK and challenge token from the request
-            console.log("WEBHOOK_VERIFIED");
-            res.status(200).send(challenge);
+            console.log("WEBHOOK_VERIFIED")
+            res.status(200).send(challenge)
         } else {
             // Responds with '403 Forbidden' if verify tokens do not match
-            res.sendStatus(403);
+            res.sendStatus(403)
         }
     }
-});
+})
 
 app.listen(port, () => {
     console.log(`webhook listening at port ${port}`)
@@ -112,10 +117,10 @@ async function downloadFile(url, outputPath, authorizationHeader) {
             headers: {
                 Authorization: authorizationHeader
             }
-        });
+        })
 
         while (response.status >= 300 && response.status <= 399) {
-            const redirectUrl = response.headers.location;
+            const redirectUrl = response.headers.location
             response = await axios({
                 method: 'GET',
                 url: redirectUrl,
@@ -124,12 +129,41 @@ async function downloadFile(url, outputPath, authorizationHeader) {
                 headers: {
                     Authorization: authorizationHeader
                 }
-            });
+            })
         }
 
-        fs.writeFileSync(outputPath, response.data);
-        console.log('File has been downloaded and saved.');
+        fs.writeFileSync(outputPath, response.data)
     } catch (error) {
-        console.error('Error downloading the file:', error);
+        // console.log(error)
+        throw error
     }
 }
+
+function error_log(message) {
+    let date = new Date()
+    let log = `${date.toISOString()} ${message}\n`
+    if (process.env.NODE_ENV === 'production') {
+        fs.appendFile(`${logDir}/error.log`, log, (err) => {
+            if (err) {
+                console.log(err)
+            }
+        })
+        return
+    }
+    console.log(log)
+}
+
+function info_log(message) {
+    let date = new Date()
+    let log = `${date.toISOString()} ${message}\n`
+    if (process.env.NODE_ENV === 'production') {
+        fs.appendFile(`${logDir}/info.log`, log, (err) => {
+            if (err) {
+                console.log(err)
+            }
+        })
+        return
+    }
+    console.log(log)
+}
+
