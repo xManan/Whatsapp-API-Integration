@@ -4,6 +4,8 @@ import dotenv from 'dotenv'
 import express from 'express'
 import axios from 'axios'
 import fs from 'fs'
+import SftpClient from 'ssh2-sftp-client'
+import path from 'path'
 
 dotenv.config()
 
@@ -24,6 +26,33 @@ const whatsappMediaUrl = "https://graph.facebook.com/v17.0"
 const app = express()
 
 app.use(express.json())
+
+app.listen(port, () => {
+    console.log(`webhook listening at port ${port}`)
+})
+
+const sftp_server = new SftpClient();
+const sfpt_config = {
+    host: process.env.SFTP_HOST,
+    username: process.env.SFTP_USER,
+    password: process.env.SFTP_PASSWORD,
+}
+
+try {
+    await sftp_connect(sftp_server, sfpt_config)
+} catch (error) {
+    error_log(error.message)
+    // throw error
+}
+
+process.on('exit', _ => {
+    sftp_server.end()
+})
+
+process.on('uncatchException', error => {
+    error_log(error.message)
+    process.exit(1)
+})
 
 // Accepts POST requests at /webhook endpoint
 app.post("/webhook", async (req, res) => {
@@ -54,18 +83,30 @@ app.post("/webhook", async (req, res) => {
             })
             let img = await response.json()
             let imgType = imgData.mime_type.split('/')[1]
-            if (!img.url) {
-                error_log(`No image url: ${JSON.stringify(img)}`)
-                res.sendStatus(200)
-                return
-            }
+            let imgPath = `${imgDir}/WA_IMG_${imgData.id}.${imgType}`
             try {
-                let imgPath = `${imgDir}/WA_IMG_${imgData.id}.${imgType}`
+                if (!img.url) {
+                    throw `No image url: ${JSON.stringify(img)}`
+                }
                 await downloadFile(img.url, imgPath, `Bearer ${token}`)
                 info_log(`Image downloaded: ${imgPath}`)
             } catch (error) {
-                error_log(error)
+                error_log(error.message)
+            }
+            try {
+                if (!sftp_server.sftp) {
+                    await sftp_connect(sftp_server, sfpt_config)
+                }
+                if (! await fileExists(imgPath, sftp_server)) {
+                    await uploadFile(imgPath, sftp_server)
+                    info_log(`Image uploaded: ${imgPath}`)
+                } else {
+                    info_log(`File already exists: ${imgPath}`)
+                }
+            } catch (error) {
+                error_log(error.message)
                 res.sendStatus(200)
+                throw error
             }
         }
         res.sendStatus(200)
@@ -103,10 +144,6 @@ app.get("/webhook", (req, res) => {
     }
 })
 
-app.listen(port, () => {
-    console.log(`webhook listening at port ${port}`)
-})
-
 async function downloadFile(url, outputPath, authorizationHeader) {
     try {
         let response = await axios({
@@ -139,6 +176,34 @@ async function downloadFile(url, outputPath, authorizationHeader) {
     }
 }
 
+async function fileExists(file, sftp_server) {
+    let result
+    try {
+        result = await sftp_server.list(process.env.SFTP_REMOTE_DIR)
+    } catch (error) {
+        throw error
+    }
+    return result.some((f) => f.name === file)
+}
+
+async function uploadFile(file, sftp_server) {
+    try {
+        await sftp_server.put(file, `${process.env.SFTP_REMOTE_DIR}/${path.basename(file)}`)
+    } catch (error) {
+        throw error
+    }
+}
+
+async function sftp_connect(sftp_server, sfpt_config) {
+    try {
+        await sftp_server.connect(sfpt_config)
+        info_log(`Connected to SFTP server: ${process.env.SFTP_HOST}`)
+    } catch (error) {
+        throw error
+    }
+}
+
+// TODO: save error in a single line
 function error_log(message) {
     let date = new Date()
     let log = `${date.toISOString()} ${message}\n`
@@ -150,7 +215,7 @@ function error_log(message) {
         })
         return
     }
-    console.log(log)
+    console.error(`\x1b[31m${log}\x1b[0m`)
 }
 
 function info_log(message) {
@@ -166,4 +231,3 @@ function info_log(message) {
     }
     console.log(log)
 }
-
